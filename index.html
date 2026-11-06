@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Yörünge</title>
+<meta name="description" content="Bu repodaki dosyaları indir.">
+<meta name="theme-color" content="#070605">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@400;500;700&display=swap&subset=latin-ext" rel="stylesheet">
+<style>
+:root{
+  --ink:#070605; --bone:#efe7d8; --dim:#a39a8a; --line:rgba(239,231,216,.14); --hot:#ff5a1f;
+  --panel-w:min(440px,38vw);
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0}
+html{background:var(--ink);color:var(--bone);font:400 14px/1.5 var(--mono);-webkit-text-size-adjust:100%}
+body{min-height:100svh;overflow:hidden}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#gl{z-index:0;touch-action:pan-y;cursor:grab}
+#gl.drag{cursor:grabbing}
+#gl.over{cursor:pointer}
+#fx{z-index:1;pointer-events:none}
+.no-gl #gl{display:none}
+.no-gl body{background:radial-gradient(circle at 30% 45%,#000 0 90px,#ffb36b 92px,#ff5a1f 97px,#2a0d04 150px,var(--ink) 420px)}
+.grain{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.045;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* ---------- başlık ---------- */
+.hero{position:fixed;z-index:3;left:clamp(20px,3.4vw,56px);bottom:clamp(20px,4vh,48px);right:calc(var(--panel-w) + 32px);pointer-events:none}
+.eyebrow{color:var(--dim);letter-spacing:.14em;font-size:12px;margin-bottom:10px}
+h1{font:400 clamp(72px,17vw,300px)/1.14 Anton,Impact,"Arial Narrow",sans-serif;letter-spacing:-.005em;white-space:nowrap;color:var(--bone);mix-blend-mode:difference;width:max-content}
+h1 span{display:inline-block;animation:rise .9s cubic-bezier(.16,1,.3,1) both;animation-delay:calc(var(--i)*38ms + .35s)}
+@keyframes rise{from{transform:translateY(.55em) rotate(4deg);opacity:0;filter:blur(10px)}}
+.stats{display:flex;flex-wrap:wrap;gap:6px 30px;margin-top:10px}
+.stats div{display:flex;gap:8px;align-items:baseline}
+.stats dt{color:var(--dim);font-size:12px}
+.stats dd{margin:0;font-weight:700}
+.eyebrow,.stats{text-shadow:0 0 6px var(--ink),0 0 2px var(--ink)}
+
+/* ---------- panel ---------- */
+main{position:fixed;z-index:4;inset:0;pointer-events:none}
+.panel{pointer-events:auto;position:absolute;top:0;right:0;bottom:0;width:var(--panel-w);min-width:340px;display:flex;flex-direction:column;
+  background:rgba(9,7,6,.74);-webkit-backdrop-filter:blur(16px) saturate(1.3);backdrop-filter:blur(16px) saturate(1.3);border-left:1px solid var(--line);
+  animation:slide 1s cubic-bezier(.16,1,.3,1) .5s both}
+@keyframes slide{from{transform:translateX(40px);opacity:0}}
+.tools{padding:18px 18px 12px;border-bottom:1px solid var(--line);display:grid;gap:12px}
+.search{display:flex;align-items:center;gap:10px;border:1px solid var(--line);padding:0 12px;min-height:44px;transition:border-color .2s}
+.search:focus-within{border-color:var(--hot)}
+.search input{flex:1;min-width:0;background:none;border:0;outline:0;height:42px}
+.search input::placeholder{color:var(--dim)}
+.search kbd{font:inherit;font-size:12px;color:var(--dim);border:1px solid var(--line);padding:0 6px}
+svg.i{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:7px;min-height:32px;padding:0 10px;border:1px solid var(--line);font-size:12px;color:var(--dim);transition:color .2s,border-color .2s,background .2s}
+.chip i{width:7px;height:7px;background:var(--c);transform:rotate(45deg)}
+.chip:hover{color:var(--bone)}
+.chip[aria-pressed=true]{color:var(--ink);background:var(--bone);border-color:var(--bone)}
+.list{flex:1;min-height:0;overflow-y:auto;list-style:none;padding:0 0 8px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.dir{position:sticky;top:0;z-index:1;padding:12px 18px 6px;font-size:12px;color:var(--dim);background:linear-gradient(#0b0908 72%,transparent);overflow-wrap:anywhere}
+.row{--p:0;position:relative;display:grid;grid-template-columns:44px 1fr auto 44px;align-items:center;min-height:52px;padding-right:8px;content-visibility:auto;contain-intrinsic-size:auto 52px;transition:background .18s}
+.row::before{content:"";position:absolute;inset:auto 0 0 0;height:2px;background:var(--c);transform:scaleX(var(--p));transform-origin:left;transition:transform .12s linear}
+.row:hover,.row.on{background:rgba(239,231,216,.07)}
+.row::after{content:"";position:absolute;left:0;top:14px;bottom:14px;width:2px;background:var(--c);opacity:.9}
+.row label{display:grid;place-items:center;height:52px;cursor:pointer}
+.row input{appearance:none;width:18px;height:18px;border:1px solid var(--dim);margin:0;cursor:pointer;display:grid;place-items:center;transition:background .15s,border-color .15s}
+.row input:checked{background:var(--hot);border-color:var(--hot)}
+.row input:checked::after{content:"";width:8px;height:4px;border:solid var(--ink);border-width:0 0 2px 2px;transform:translateY(-1px) rotate(-45deg)}
+.name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.size{color:var(--dim);font-size:12px;padding:0 10px;white-space:nowrap}
+.get{display:grid;place-items:center;width:44px;height:44px;transition:color .15s,transform .15s}
+.get:hover{color:var(--hot);transform:translateY(2px)}
+.get:disabled{cursor:progress;color:var(--dim);transform:none}
+.row.done .get{color:#4de1c1}
+.row.fail .get{color:#ff6f6f}
+.note{padding:28px 18px;color:var(--dim);overflow-wrap:anywhere}
+.note b{display:block;color:var(--bone);font-size:16px;margin-bottom:6px}
+.tray{border-top:1px solid var(--line);padding:12px 18px calc(12px + env(safe-area-inset-bottom));display:grid;gap:8px}
+.log:empty{display:none}
+.log{font-size:12px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cta{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:48px;background:var(--hot);color:var(--ink);font-weight:700;text-decoration:none;transition:background .18s,transform .18s}
+.cta:hover{background:var(--bone)}
+.cta:active{transform:scale(.985)}
+.cta:disabled{opacity:.55;cursor:progress}
+.ghost{justify-self:center;min-height:32px;font-size:12px;color:var(--dim);text-decoration:underline;text-underline-offset:3px}
+.ghost:hover{color:var(--bone)}
+[hidden]{display:none!important}
+form.open{display:grid;gap:10px;padding:18px}
+form.open label{color:var(--dim);font-size:12px}
+
+/* ---------- yıldız kartı ---------- */
+#pop{position:fixed;z-index:5;left:0;top:0;width:270px;padding:12px 14px;background:rgba(9,7,6,.92);border:1px solid var(--line);border-top:2px solid var(--c);will-change:transform;animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0}}
+#pop p{font-weight:700;overflow-wrap:anywhere}
+#pop small{display:block;color:var(--dim);font-size:12px;margin:2px 0 10px;overflow-wrap:anywhere}
+
+/* ---------- mobil ---------- */
+@media (max-width:900px){
+  body{overflow:visible}
+  :root{--panel-w:100%}
+  .hero{position:relative;left:auto;right:auto;bottom:auto;min-height:66svh;overflow-x:clip;display:flex;flex-direction:column;justify-content:flex-end;padding:0 20px 18px}
+  h1{font-size:clamp(64px,26vw,190px)}
+  main{position:relative;inset:auto}
+  .panel{position:relative;width:100%;min-width:0;min-height:60svh;border-left:0;border-top:1px solid var(--line);background:rgba(9,7,6,.9);animation-name:fade}
+  .list{overflow:visible}
+  .dir{position:static;background:none}
+  .tray{position:sticky;bottom:0;background:#0b0908}
+  .search kbd{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<canvas id="gl" aria-hidden="true"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="hero">
+  <p class="eyebrow" id="owner">&nbsp;</p>
+  <h1 id="title">Yörünge</h1>
+  <dl class="stats" id="stats"></dl>
+</header>
+
+<main>
+  <section class="panel" id="panel" aria-label="Dosyalar">
+    <div class="tools" id="tools" hidden>
+      <label class="search">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span class="sr">Dosya ara</span>
+        <input id="q" type="search" placeholder="Dosya ara" autocomplete="off" spellcheck="false">
+        <kbd aria-hidden="true">/</kbd>
+      </label>
+      <div class="chips" id="chips" role="group" aria-label="Dosya türü"></div>
+    </div>
+    <ul class="list" id="list"></ul>
+    <div class="tray">
+      <div class="log" id="log" role="status" aria-live="polite"></div>
+      <a class="cta" id="all" hidden rel="noopener">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 20h14"/></svg>
+        Tümünü ZIP olarak indir
+      </a>
+      <button class="cta" id="zip" type="button" hidden></button>
+      <button class="ghost" id="clear" type="button" hidden>Seçimi temizle</button>
+    </div>
+  </section>
+</main>
+
+<div id="pop" role="dialog" aria-label="Dosya" hidden>
+  <p id="popName"></p>
+  <small id="popMeta"></small>
+  <button class="cta" id="popGet" type="button">İndir</button>
+</div>
+
+<script>
+'use strict';
+/* ==========================================================================
+   AYARLAR
+   Boş bırakırsan repo adresten bulunur (kullanici.github.io/repo).
+   Özel alan adı kullanıyorsan repo'yu buraya yaz: 'kullanici/repo'
+   ========================================================================== */
+const CONFIG = {
+  repo:   '',
+  branch: '',                 // boşsa reponun varsayılan dalı
+  title:  '',                 // boşsa repo adı
+  hide:   [/^index\.html$/i, /^CNAME$/, /(^|\/)\./],   // listede görünmeyecekler
+};
+
+const CATS = {
+  app:   {label:'Uygulama', color:'#ff5a1f', ext:'apk aab exe msi dmg pkg deb rpm appimage ipa msix'},
+  arc:   {label:'Arşiv',    color:'#ffc04d', ext:'zip rar 7z tar gz tgz bz2 xz iso'},
+  doc:   {label:'Belge',    color:'#efe7d8', ext:'pdf doc docx xls xlsx ppt pptx odt ods txt md rtf csv epub'},
+  img:   {label:'Görsel',   color:'#4de1c1', ext:'png jpg jpeg gif webp svg avif bmp ico heic psd'},
+  med:   {label:'Medya',    color:'#ff6fa8', ext:'mp4 mov mkv webm avi mp3 wav flac ogg m4a'},
+  code:  {label:'Kod',      color:'#8fb4ff', ext:'js ts py dart java kt c h cpp cs go rs php rb sh ps1 bat json yaml yml xml html css sql toml'},
+  other: {label:'Diğer',    color:'#a39a8a', ext:''},
+};
+const EXT = {};
+for (const k in CATS) for (const e of CATS[k].ext.split(' ')) if (e) EXT[e] = k;
+
+const $ = id => document.getElementById(id);
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const ICON_GET  = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4.5-4.5M12 15l-4.5-4.5M5 20h14"/></svg>';
+const ICON_DONE = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4.5 4.5L19 7"/></svg>';
+const ICON_FAIL = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+
+const fmtSize = n => {
+  if (n < 1024) return n + ' B';
+  const u = ['KB','MB','GB']; let i = -1;
+  do { n /= 1024; i++; } while (n >= 1024 && i < 2);
+  return n.toLocaleString('tr', {maximumFractionDigits: n < 10 ? 1 : 0}) + ' ' + u[i];
+};
+const lower = s => s.toLocaleLowerCase('tr');
+
+/* ---------- repo tespiti ---------- */
+function resolveRepo() {
+  const valid = s => /^[\w.-]+\/[\w.-]+$/.test(s || '');
+  const param = new URLSearchParams(location.search).get('repo');
+  if (valid(CONFIG.repo)) return CONFIG.repo;
+  if (valid(param)) return param;
+  const m = location.hostname.match(/^([\w-]+)\.github\.io$/i);
+  if (!m) return null;
+  const seg = location.pathname.split('/').filter(Boolean)[0];
+  return m[1] + '/' + (seg && !/\.html?$/i.test(seg) ? seg : location.hostname);
+}
+
+/* ---------- GitHub ---------- */
+class GhError extends Error {
+  constructor(title, detail) { super(title); this.detail = detail; }
+}
+async function gh(path) {
+  let r;
+  try {
+    r = await fetch('https://api.github.com' + path, {headers: {Accept: 'application/vnd.github+json'}});
+  } catch { throw new GhError('GitHub\'a ulaşılamadı', 'İnternet bağlantını kontrol edip sayfayı yenile.'); }
+  if (r.ok) return r.json();
+  if (r.status === 404) throw new GhError('Repo bulunamadı', 'Repo adı yanlış ya da repo private. Bu sayfa yalnızca public repoları okuyabilir.');
+  if ((r.status === 403 || r.status === 429) && r.headers.get('x-ratelimit-remaining') === '0') {
+    const t = new Date(+r.headers.get('x-ratelimit-reset') * 1000);
+    throw new GhError('GitHub istek sınırı doldu', 'Saat ' + t.toLocaleTimeString('tr', {hour: '2-digit', minute: '2-digit'}) + ' sonrası yeniden dene.');
+  }
+  throw new GhError('GitHub hata verdi', 'Durum kodu: ' + r.status);
+}
+async function loadRepo(slug) {
+  const key = 'yorunge:' + slug;
+  try {
+    const meta = await gh('/repos/' + slug);
+    const branch = CONFIG.branch || meta.default_branch;
+    const tree = await gh('/repos/' + slug + '/git/trees/' + encodeURIComponent(branch) + '?recursive=1');
+    const data = {
+      branch, pushed: meta.pushed_at, truncated: !!tree.truncated,
+      items: (tree.tree || []).filter(t => t.type === 'blob').map(t => ({path: t.path, size: t.size || 0})),
+    };
+    try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
+    return data;
+  } catch (e) {
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem(key)); } catch {}
+    if (cached) return {...cached, stale: e.message};
+    throw e;
+  }
+}
+const rawUrl = (slug, branch, path) =>
+  'https://raw.githubusercontent.com/' + slug + '/' + encodeURIComponent(branch) + '/' + path.split('/').map(encodeURIComponent).join('/');
+
+/* ---------- ZIP (sıkıştırmasız) ---------- */
+const CRC_T = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(u8) {
+  let c = 0xffffffff;
+  for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function makeZip(entries) {
+  const enc = new TextEncoder(), body = [], central = [];
+  const d = new Date();
+  const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  let off = 0;
+  for (const {name, data} of entries) {
+    const n = enc.encode(name), crc = crc32(data);
+    const l = new DataView(new ArrayBuffer(30));
+    l.setUint32(0, 0x04034b50, true); l.setUint16(4, 20, true); l.setUint16(6, 0x0800, true); // bit 11: UTF-8 ad
+    l.setUint16(10, time, true); l.setUint16(12, date, true); l.setUint32(14, crc, true);
+    l.setUint32(18, data.length, true); l.setUint32(22, data.length, true); l.setUint16(26, n.length, true);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+    c.setUint16(12, time, true); c.setUint16(14, date, true); c.setUint32(16, crc, true);
+    c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, n.length, true);
+    c.setUint32(42, off, true);
+    body.push(l.buffer, n, data); central.push(c.buffer, n);
+    off += 30 + n.length + data.length;
+  }
+  const cSize = central.reduce((s, p) => s + p.byteLength, 0);
+  const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, entries.length, true); e.setUint16(10, entries.length, true);
+  e.setUint32(12, cSize, true); e.setUint32(16, off, true);
+  return new Blob([...body, ...central, e.buffer], {type: 'application/zip'});
+}
+
+/* ==========================================================================
+   GALAKSİ
+   ========================================================================== */
+const STAR_CAP = 4000, CORE = .23, ROLL = -.2, FOCAL = 1.7;
+const glc = $('gl'), fxc = $('fx'), fx = fxc.getContext('2d');
+const cam = {yaw: 0, pitch: .54, dist: 3.15, vy: 0, vp: 0};
+const view = {w: 1, h: 1, dpr: 1, aspect: 1, sx: 0, sy: 0, mobile: false};
+const motion = {t: 0, intro: REDUCED ? 1 : 0, stars: 0, pulse: 9, pulseA: 0, heat: 0};
+const G = {gl: null};
+
+const KIND_DUST = 0, KIND_FAR = 1, KIND_FILE = 2;
+const VS_POINT = `
+attribute vec3 aPos; attribute vec3 aCol; attribute float aSize; attribute float aSeed; attribute float aKind;
+uniform float uT,uIntro,uYaw,uPitch,uRoll,uDist,uF,uAspect,uDpr,uPulse,uPulseA; uniform vec2 uShift;
+varying vec3 vCol; varying float vA;
+void main(){
+  bool dust=aKind<.5, far=aKind>.5&&aKind<1.5;
+  vec3 p=aPos; float r=length(p.xz), s, c;
+  if(dust){ float a=uT*.09/(r+.3); s=sin(a); c=cos(a); p.xz=mat2(c,-s,s,c)*p.xz; }
+  float e=clamp(uIntro*1.7-aSeed*.7,0.,1.); e=1.-pow(1.-e,4.);
+  if(!far){ float a=(1.-e)*3.5; s=sin(a); c=cos(a); p.xz=mat2(c,-s,s,c)*p.xz; p*=mix(.03,1.,e); }
+  float w=far?0.:exp(-pow((r-uPulse)*7.,2.))*uPulseA;
+  p.y+=w*.14*(aSeed-.5);
+  float cy=cos(uYaw),sy=sin(uYaw),cp=cos(uPitch),sp=sin(uPitch);
+  vec3 q=vec3(p.x*cy+p.z*sy,p.y,-p.x*sy+p.z*cy);
+  vec3 v=vec3(q.x,q.y*cp+q.z*sp,-q.y*sp+q.z*cp);
+  float d=v.z+uDist;
+  vec2 n=v.xy*uF/d;
+  float cr=cos(uRoll),sr=sin(uRoll);
+  n=vec2(n.x*cr-n.y*sr,n.x*sr+n.y*cr);
+  gl_Position=d<.05?vec4(2.,2.,0.,1.):vec4(n.x/uAspect+uShift.x,n.y+uShift.y,0.,1.);
+  gl_PointSize=aSize*(1.+w*2.)*uDpr*(far?1.:uF*1.8/d);
+  float tw=far?.8+.2*sin(uT*2.+aSeed*40.):1.;
+  vCol=aCol; vA=tw*(far?1.:e)*(1.+w*3.);
+}`;
+const FS_POINT = `
+precision mediump float; varying vec3 vCol; varying float vA;
+void main(){ float d=length(gl_PointCoord-.5)*2.; float a=exp(-d*d*5.)*(1.-smoothstep(.8,1.,d)); gl_FragColor=vec4(vCol*a*vA,0.); }`;
+const VS_QUAD = `attribute vec2 aP; void main(){ gl_Position=vec4(aP,0.,1.); }`;
+const FS_HOLE = `
+precision highp float;
+uniform vec2 uC; uniform float uR,uT,uTilt,uRoll,uHeat;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float fb(vec2 p){return .55*n(p)+.3*n(p*2.3+7.)+.15*n(p*5.1+3.);}
+vec3 ramp(float t){return mix(vec3(.75,.09,.02),mix(vec3(1.,.42,.1),vec3(1.,.93,.82),smoothstep(.45,.95,t)),smoothstep(0.,.5,t));}
+void main(){
+  vec2 uv=(gl_FragCoord.xy-uC)/uR;
+  float cr=cos(-uRoll),sr=sin(-uRoll); uv=vec2(uv.x*cr-uv.y*sr,uv.x*sr+uv.y*cr);
+  float r=length(uv);
+  if(r>8.){gl_FragColor=vec4(0.);return;}
+  vec2 q=vec2(uv.x,uv.y/uTilt); float d=length(q); float a=atan(q.y,q.x)-uT*1.15/(d*d*.6+.4);
+  vec2 ci=vec2(cos(a),sin(a));
+  float st=fb(ci*2.6+vec2(d*2.6,-d*1.4));
+  float band=smoothstep(1.3,1.72,d)*(1.-smoothstep(1.9,5.6,d));
+  float dop=1.+.85*(-q.x/max(d,.001));
+  float mask=uv.y<0.?1.:smoothstep(1.,1.05,r);
+  float disc=band*(.15+1.5*st*st)*dop*mask*(1.+uHeat*1.6);
+  float lens=exp(-pow((r-1.2)*7.5,2.))*(.28+.72*smoothstep(-.5,.9,uv.y/r))*(.5+fb(normalize(uv)*3.+uT*.3));
+  float ring=exp(-abs(r-1.035)*34.)*(1.+uHeat*2.5);
+  float shadow=1.-smoothstep(.975,1.015,r);
+  float glow=exp(-r*.75)*.16*(1.+uHeat*3.)*(1.-shadow);
+  vec3 col=ramp(clamp(disc*.6,0.,1.))*disc*1.25+ramp(.72)*lens*1.15+vec3(1.,.9,.78)*ring+vec3(1.,.3,.08)*glow;
+  col=1.-exp(-col*1.5);
+  gl_FragColor=vec4(col,shadow);
+}`;
+
+function compile(gl, vs, fs) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    gl.attachShader(p, s);
+  }
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
+  return {p, u};
+}
+const gauss = () => (Math.random() + Math.random() + Math.random() + Math.random() - 2) / 2;
+
+function dustPoints() {
+  const mobile = innerWidth < 900;
+  const N = mobile ? 9000 : 26000, FOG = mobile ? 120 : 320, FAR = mobile ? 500 : 1400, ARMS = 3;
+  const a = new Float32Array((N + FOG + FAR) * 9);
+  let o = 0;
+  const hot = [1, .5, .22], mid = [.96, .78, .6], cold = [.42, .5, 1];
+  const tint = k => k < .5 ? hot.map((v, j) => v + (mid[j] - v) * k * 2) : mid.map((v, j) => v + (cold[j] - v) * (k - .5) * 2);
+  for (let i = 0; i < N; i++) {
+    const r = .34 + Math.pow(Math.random(), 1.35) * 2.5;
+    const th = (i % ARMS) / ARMS * 6.283 + r * 2.5 + gauss() * 1.05 / (r + .5);
+    const y = gauss() * .12 * (r * .4 + .15);
+    const c = tint(Math.min(r / 1.9, 1)), b = .32 + Math.random() * .6;
+    a.set([Math.cos(th) * r, y, Math.sin(th) * r, c[0] * b, c[1] * b, c[2] * b, 1.3 + Math.random() * 2.4, Math.random(), KIND_DUST], o);
+    o += 9;
+  }
+  for (let i = 0; i < FOG; i++) {
+    const r = .55 + Math.random() * 2.2;
+    const th = (i % ARMS) / ARMS * 6.283 + r * 2.5 + gauss() * .5;
+    const c = tint(Math.min(r / 1.9, 1)), b = .035 + Math.random() * .035;
+    a.set([Math.cos(th) * r, gauss() * .1, Math.sin(th) * r, c[0] * b, c[1] * b, c[2] * b, 70 + Math.random() * 110, Math.random(), KIND_DUST], o);
+    o += 9;
+  }
+  for (let i = 0; i < FAR; i++) {
+    const u = Math.random() * 2 - 1, t = Math.random() * 6.283, s = Math.sqrt(1 - u * u), R = 5 + Math.random() * 3;
+    const b = .25 + Math.random() * .6;
+    a.set([s * Math.cos(t) * R, u * R, s * Math.sin(t) * R, b, b * .97, b * .92, 1 + Math.random() * 1.6, Math.random(), KIND_FAR], o);
+    o += 9;
+  }
+  return a;
+}
+const rgb = hex => [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16) / 255);
+
+function bindPoints(gl, prog, buf) {
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  [['aPos', 3, 0], ['aCol', 3, 12], ['aSize', 1, 24], ['aSeed', 1, 28], ['aKind', 1, 32]].forEach(([n, s, off]) => {
+    const l = gl.getAttribLocation(prog.p, n);
+    gl.enableVertexAttribArray(l);
+    gl.vertexAttribPointer(l, s, gl.FLOAT, false, 36, off);
+  });
+}
+function initGL() {
+  const gl = glc.getContext('webgl', {alpha: false, antialias: false, powerPreference: 'high-performance'});
+  if (!gl) return false;
+  try {
+    const points = compile(gl, VS_POINT, FS_POINT), hole = compile(gl, VS_QUAD, FS_HOLE);
+    const dust = gl.createBuffer(), stars = gl.createBuffer(), quad = gl.createBuffer();
+    const d = dustPoints();
+    gl.bindBuffer(gl.ARRAY_BUFFER, dust); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    Object.assign(G, {gl, points, hole, dust, stars, quad, nDust: d.length / 9, nStars: 0});
+    gl.enable(gl.BLEND);
+    return true;
+  } catch (e) { console.error(e); return false; }
+}
+const panelLeft = () => $('panel').getBoundingClientRect().left;
+
+function resize() {
+  const w = innerWidth, h = innerHeight, mobile = w <= 900;
+  const dpr = Math.min(devicePixelRatio || 1, mobile ? 1.5 : 1.75);
+  Object.assign(view, {w, h, dpr, aspect: w / h, mobile});
+  for (const c of [glc, fxc]) { c.width = w * dpr; c.height = h * dpr; }
+  if (mobile) { view.sx = 0; view.sy = .36; cam.dist = Math.max(3.4, 2.6 / Math.min(view.aspect * 1.6, 1)); }
+  else { view.sx = -$('panel').offsetWidth / w; view.sy = .2; cam.dist = 3.15; }
+  if (G.gl) G.gl.viewport(0, 0, glc.width, glc.height);
+  fitTitle();
+}
+function project(p) {
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const x = p[0] * cy + p[2] * sy, z0 = -p[0] * sy + p[2] * cy, y = p[1];
+  const vy = y * cp + z0 * sp, vz = -y * sp + z0 * cp, d = vz + cam.dist;
+  const nx = x * FOCAL / d, ny = vy * FOCAL / d, cr = Math.cos(ROLL), sr = Math.sin(ROLL);
+  const X = (nx * cr - ny * sr) / view.aspect + view.sx, Y = nx * sr + ny * cr + view.sy;
+  return {x: (X + 1) / 2 * view.w, y: (1 - Y) / 2 * view.h, d};
+}
+const coreScreen = () => ({x: (view.sx + 1) / 2 * view.w, y: (1 - view.sy) / 2 * view.h, r: CORE * FOCAL / cam.dist * view.h / 2});
+
+function drawGL() {
+  const gl = G.gl, u = G.points.u, h = G.hole.u, c = coreScreen();
+  gl.clearColor(.027, .023, .02, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(G.points.p);
+  gl.uniform1f(u.uT, motion.t); gl.uniform1f(u.uYaw, cam.yaw); gl.uniform1f(u.uPitch, cam.pitch); gl.uniform1f(u.uRoll, ROLL);
+  gl.uniform1f(u.uDist, cam.dist); gl.uniform1f(u.uF, FOCAL); gl.uniform1f(u.uAspect, view.aspect); gl.uniform1f(u.uDpr, view.dpr);
+  gl.uniform1f(u.uPulse, motion.pulse); gl.uniform1f(u.uPulseA, motion.pulseA); gl.uniform2f(u.uShift, view.sx, view.sy);
+  gl.blendFunc(gl.ONE, gl.ONE);
+  gl.uniform1f(u.uIntro, motion.intro);
+  bindPoints(gl, G.points, G.dust);
+  gl.drawArrays(gl.POINTS, 0, G.nDust);
+  if (G.nStars) {
+    gl.uniform1f(u.uIntro, motion.stars);
+    bindPoints(gl, G.points, G.stars);
+    gl.drawArrays(gl.POINTS, 0, G.nStars);
+  }
+  gl.useProgram(G.hole.p);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.uniform2f(h.uC, c.x * view.dpr, (view.h - c.y) * view.dpr);
+  gl.uniform1f(h.uR, c.r * view.dpr * Math.min(1, motion.intro * 2.2)); gl.uniform1f(h.uT, motion.t);
+  gl.uniform1f(h.uTilt, Math.max(.14, Math.abs(Math.sin(cam.pitch)))); gl.uniform1f(h.uRoll, ROLL); gl.uniform1f(h.uHeat, motion.heat);
+  gl.bindBuffer(gl.ARRAY_BUFFER, G.quad);
+  const l = gl.getAttribLocation(G.hole.p, 'aP');
+  gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+/* ---------- üst katman: etiket, kuyruklu yıldız, ilerleme ---------- */
+const comets = [];
+const short = (s, n) => s.length > n ? s.slice(0, n - 8) + '…' + s.slice(-7) : s;
+function drawFx() {
+  const c = fx, core = coreScreen();
+  c.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  c.clearRect(0, 0, view.w, view.h);
+  c.font = '500 11px "JetBrains Mono",monospace';
+  c.textBaseline = 'middle';
+  if (motion.stars > .75 && !view.mobile) {
+    const boxes = [], floor = $('owner').getBoundingClientRect().top - 12, wall = panelLeft() - 8;
+    for (const f of labeled) {
+      if (!matches(f)) continue;
+      const p = project(f.pos), side = p.x > core.x ? 1 : -1, text = short(f.name, 26);
+      const w = c.measureText(text).width, lx = p.x + side * 19, x0 = side > 0 ? lx : lx - w, y0 = p.y - 16;
+      if (x0 + w > wall || x0 < 4 || y0 < 4 || y0 + 14 > floor) continue;
+      if (boxes.some(b => x0 < b.x + b.w + 8 && x0 + w + 8 > b.x && y0 < b.y + 16 && y0 + 16 > b.y)) continue;
+      boxes.push({x: x0, y: y0, w});
+      c.globalAlpha = Math.min(1, (motion.stars - .75) * 4) * Math.max(.6, Math.min(1, 1.35 - p.d / cam.dist * .7));
+      c.strokeStyle = CATS[f.cat].color; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(p.x + side * 6, p.y); c.lineTo(p.x + side * 16, p.y - 9); c.stroke();
+      c.fillStyle = '#efe7d8'; c.textAlign = side > 0 ? 'left' : 'right';
+      c.fillText(text, lx, p.y - 9);
+    }
+  }
+  c.globalAlpha = 1;
+  const f = activeStar();
+  if (f) {
+    const p = project(f.pos);
+    c.strokeStyle = CATS[f.cat].color; c.lineWidth = 1.4;
+    c.beginPath(); c.arc(p.x, p.y, 12 + Math.sin(motion.t * 5) * 2, 0, 6.283); c.stroke();
+    if (hoverFrom === 'row' && !view.mobile) {
+      const b = f.el.getBoundingClientRect(), y = Math.max(0, Math.min(view.h, b.top + b.height / 2));
+      c.globalAlpha = .75; c.beginPath(); c.moveTo(b.left, y);
+      c.bezierCurveTo(b.left - 90, y, p.x + 110, p.y, p.x + 12, p.y); c.stroke(); c.globalAlpha = 1;
+    } else if (hoverFrom === 'star') {
+      c.fillStyle = '#efe7d8'; c.textAlign = 'center';
+      c.fillText(short(f.name, 34) + '  ' + fmtSize(f.size), p.x, p.y - 24);
+    }
+  }
+  for (let i = comets.length - 1; i >= 0; i--) {
+    const m = comets[i], e = (performance.now() - m.t0) / 1000;
+    if (e >= 1) { comets.splice(i, 1); continue; }
+    const start = project(m.pos), a0 = Math.atan2(start.y - core.y, start.x - core.x), r0 = Math.hypot(start.x - core.x, start.y - core.y);
+    const at = k => { const t = k * k, r = r0 * (1 - t) + core.r * t; return [core.x + Math.cos(a0 + t * 5) * r, core.y + Math.sin(a0 + t * 5) * r * (1 - t * .55)]; };
+    c.strokeStyle = m.color; c.lineCap = 'round';
+    for (let s = 0; s < 14; s++) {
+      const [x0, y0] = at(Math.max(0, e - s * .022)), [x1, y1] = at(Math.max(0, e - (s + 1) * .022));
+      c.globalAlpha = (1 - s / 14) * .9; c.lineWidth = 3.2 * (1 - s / 14) + .3;
+      c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+    }
+    c.globalAlpha = 1; c.lineCap = 'butt';
+  }
+  const pr = totalProgress();
+  if (pr !== null) {
+    c.strokeStyle = '#efe7d8'; c.lineWidth = 2;
+    c.beginPath(); c.arc(core.x, core.y, core.r * 1.5, -Math.PI / 2, -Math.PI / 2 + pr * 6.283); c.stroke();
+    c.fillStyle = '#efe7d8'; c.textAlign = 'center';
+    c.font = '700 ' + Math.max(13, core.r * .36) + 'px "JetBrains Mono",monospace';
+    c.fillText('%' + Math.floor(pr * 100), core.x, core.y);
+  }
+}
+
+/* ---------- döngü ---------- */
+let lastT = 0;
+const clampPitch = v => Math.max(.14, Math.min(1.05, v));
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((now - lastT) / 1000, .05); lastT = now;
+  if (view.mobile && scrollY > innerHeight) return;
+  if (!REDUCED) {
+    motion.t += dt;
+    motion.intro = Math.min(1, motion.intro + dt / 2.4);
+    if (!dragging && !hoverStar && !popFile) cam.yaw += dt * .035;
+    cam.yaw += cam.vy; cam.pitch = clampPitch(cam.pitch + cam.vp);
+    cam.vy *= .93; cam.vp *= .9;
+  }
+  motion.stars = REDUCED ? (G.nStars ? 1 : 0) : Math.min(1, motion.stars + (G.nStars ? dt / 1.5 : 0));
+  motion.pulse += dt * 1.5;
+  motion.pulseA = Math.max(0, motion.pulseA - dt * .55);
+  motion.heat += ((jobs.size ? 1 : 0) - motion.heat) * Math.min(1, dt * 3);
+  drawGL(); drawFx();
+  if (popFile) placePop();
+}
+
+/* ---------- etkileşim ---------- */
+let dragging = false, moved = 0, lastX = 0, lastY = 0, hoverStar = null, hoverFrom = null, popFile = null;
+const activeStar = () => hoverStar || popFile;
+function pick(x, y) {
+  let best = null, bd = 24;
+  for (const f of files) {
+    if (!f.pos || !matches(f)) continue;
+    const p = project(f.pos), d = Math.hypot(p.x - x, p.y - y);
+    if (d < bd) { bd = d; best = f; }
+  }
+  return best;
+}
+function setHover(f, from) {
+  if (hoverStar === f) return;
+  if (hoverStar) hoverStar.el.classList.remove('on');
+  hoverStar = f; hoverFrom = from;
+  if (f) f.el.classList.add('on');
+  glc.classList.toggle('over', !!f);
+}
+glc.addEventListener('pointerdown', e => {
+  dragging = true; moved = 0; lastX = e.clientX; lastY = e.clientY;
+  if (e.pointerType === 'mouse') glc.setPointerCapture(e.pointerId);
+  glc.classList.add('drag');
+});
+glc.addEventListener('pointermove', e => {
+  if (dragging) {
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    moved += Math.abs(dx) + Math.abs(dy); lastX = e.clientX; lastY = e.clientY;
+    cam.yaw -= dx * .005; cam.vy = -dx * .0012;
+    if (e.pointerType === 'mouse') { cam.pitch = clampPitch(cam.pitch + dy * .004); cam.vp = dy * .0008; }
+  } else if (e.pointerType === 'mouse') setHover(pick(e.clientX, e.clientY), 'star');
+});
+const endDrag = () => { dragging = false; glc.classList.remove('drag'); };
+glc.addEventListener('pointerup', e => {
+  endDrag();
+  if (moved < 7) { const f = pick(e.clientX, e.clientY); f ? openPop(f) : closePop(); }
+});
+glc.addEventListener('pointercancel', endDrag);
+glc.addEventListener('pointerleave', () => { if (!dragging) setHover(null); });
+glc.addEventListener('wheel', e => {
+  if (view.mobile) return;
+  e.preventDefault();
+  cam.dist = Math.max(2.1, Math.min(4.6, cam.dist * (1 + e.deltaY * .0009)));
+}, {passive: false});
+
+function openPop(f) {
+  popFile = f;
+  const p = $('pop');
+  p.style.setProperty('--c', CATS[f.cat].color);
+  $('popName').textContent = f.name;
+  $('popMeta').textContent = (f.dir ? f.dir + ' · ' : '') + CATS[f.cat].label + ' · ' + fmtSize(f.size);
+  p.hidden = false;
+  placePop();
+}
+function closePop() { popFile = null; $('pop').hidden = true; }
+function placePop() {
+  const a = project(popFile.pos), box = $('pop'), w = box.offsetWidth, h = box.offsetHeight;
+  const maxX = (view.mobile ? view.w : panelLeft()) - w - 12;
+  const x = Math.max(12, Math.min(maxX, a.x + 18));
+  const y = Math.max(12, Math.min(innerHeight - h - 12, a.y - h / 2));
+  box.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+}
+$('popGet').onclick = () => { const f = popFile; closePop(); download(f); };
+
+/* ==========================================================================
+   LİSTE VE İNDİRME
+   ========================================================================== */
+let slug = '', branch = '', files = [], labeled = [], cat = null, query = '';
+const jobs = new Set();
+const ROW_CAP = 1500;
+
+const matches = f => (!cat || f.cat === cat) && (!query || lower(f.path).includes(query));
+const totalProgress = () => {
+  if (!jobs.size) return null;
+  let d = 0, t = 0;
+  for (const j of jobs) { d += j.done; t += j.total; }
+  return t ? Math.min(1, d / t) : 0;
+};
+
+function classify(path) {
+  const name = path.split('/').pop();
+  const ext = name.includes('.') ? lower(name.split('.').pop()) : '';
+  return {name, dir: path.slice(0, Math.max(0, path.length - name.length - 1)), cat: EXT[ext] || 'other'};
+}
+function makeRow(f) {
+  const li = document.createElement('li');
+  li.className = 'row'; li.style.setProperty('--c', CATS[f.cat].color);
+  const lab = document.createElement('label'), box = document.createElement('input');
+  box.type = 'checkbox'; box.setAttribute('aria-label', f.name + ' seç');
+  box.onchange = () => { f.sel = box.checked; syncTray(); };
+  lab.append(box);
+  const name = document.createElement('span');
+  name.className = 'name'; name.textContent = f.name; name.title = f.path;
+  const size = document.createElement('span');
+  size.className = 'size'; size.textContent = fmtSize(f.size);
+  const get = document.createElement('button');
+  get.className = 'get'; get.type = 'button'; get.innerHTML = ICON_GET;
+  get.setAttribute('aria-label', f.name + ' indir');
+  get.onclick = () => download(f);
+  li.append(lab, name, size, get);
+  li.onpointerenter = e => { if (e.pointerType === 'mouse' && f.pos) setHover(f, 'row'); };
+  li.onpointerleave = e => { if (e.pointerType === 'mouse') setHover(null); };
+  Object.assign(f, {el: li, box, btn: get});
+}
+function note(title, text) {
+  const li = document.createElement('li'), b = document.createElement('b');
+  li.className = 'note'; b.textContent = title;
+  li.append(b, text);
+  return li;
+}
+function renderList() {
+  const shown = files.filter(matches), out = [];
+  let dir = null;
+  for (const f of shown.slice(0, ROW_CAP)) {
+    if (f.dir !== dir) {
+      dir = f.dir;
+      const h = document.createElement('li');
+      h.className = 'dir'; h.textContent = dir ? dir + '/' : 'kök dizin';
+      out.push(h);
+    }
+    out.push(f.el);
+  }
+  if (!shown.length) out.push(note('Eşleşen dosya yok', 'Aramayı ya da tür filtresini değiştir.'));
+  else if (shown.length > ROW_CAP) out.push(note((shown.length - ROW_CAP) + ' dosya daha var', 'Görmek için aramayı daralt.'));
+  $('list').replaceChildren(...out);
+}
+function renderChips() {
+  const counts = {};
+  for (const f of files) counts[f.cat] = (counts[f.cat] || 0) + 1;
+  const keys = Object.keys(CATS).filter(k => counts[k]);
+  if (keys.length < 2) { $('chips').hidden = true; return; }
+  $('chips').replaceChildren(...keys.map(k => {
+    const b = document.createElement('button'), dot = document.createElement('i');
+    b.type = 'button'; b.className = 'chip'; b.style.setProperty('--c', CATS[k].color);
+    b.setAttribute('aria-pressed', 'false');
+    b.append(dot, CATS[k].label + ' ' + counts[k]);
+    b.onclick = () => {
+      cat = cat === k ? null : k;
+      for (const c of $('chips').children) c.setAttribute('aria-pressed', c === b && cat ? 'true' : 'false');
+      applyFilter();
+    };
+    return b;
+  }));
+}
+function applyFilter() { closePop(); renderList(); uploadStars(); }
+
+function layoutStars() {
+  const groups = new Map();
+  for (const f of files.slice(0, STAR_CAP)) {
+    const top = f.path.includes('/') ? f.path.split('/')[0] : '';
+    if (!groups.has(top)) groups.set(top, []);
+    groups.get(top).push(f);
+  }
+  let g = 0;
+  for (const items of groups.values()) {
+    items.forEach((f, j) => {
+      const t = (j + .5) / items.length;
+      const r = .68 + .8 * Math.sqrt((j * .618034) % 1);
+      const th = 6.283 * (g + t * .82) / groups.size + r * 1.5;
+      f.pos = [Math.cos(th) * r, gauss() * .05, Math.sin(th) * r];
+    });
+    g++;
+  }
+  labeled = files.filter(f => f.pos).sort((a, b) => b.size - a.size).slice(0, 14);
+}
+function uploadStars() {
+  if (!G.gl) return;
+  const list = files.filter(f => f.pos), a = new Float32Array(list.length * 9);
+  list.forEach((f, i) => {
+    const on = matches(f), dim = on ? 1.5 : .2, c = rgb(CATS[f.cat].color);
+    const size = (9 + 3.6 * Math.log10(f.size / 1024 + 1)) * (on ? 1 : .6) * (list.length < 30 ? 1.6 : 1);
+    a.set([...f.pos, c[0] * dim, c[1] * dim, c[2] * dim, size, f.seed, KIND_FILE], i * 9);
+  });
+  G.gl.bindBuffer(G.gl.ARRAY_BUFFER, G.stars);
+  G.gl.bufferData(G.gl.ARRAY_BUFFER, a, G.gl.DYNAMIC_DRAW);
+  G.nStars = list.length;
+}
+
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name; a.style.display = 'none';
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+async function grab(f, onBytes) {
+  const r = await fetch(rawUrl(slug, branch, f.path));
+  if (!r.ok) throw new Error(r.status === 404 ? f.name + ' bulunamadı' : 'GitHub hata verdi (' + r.status + ')');
+  const reader = r.body.getReader(), parts = [];
+  for (;;) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    parts.push(value); onBytes(value.length);
+  }
+  return new Blob(parts, {type: 'application/octet-stream'});
+}
+const launch = f => { if (f.pos && !REDUCED) comets.push({t0: performance.now(), pos: f.pos, color: CATS[f.cat].color}); };
+const shock = () => { if (!REDUCED) { motion.pulse = .15; motion.pulseA = 1; } };
+const say = t => { $('log').textContent = t; };
+const errText = e => 'Hata: ' + (e instanceof TypeError ? 'bağlantı koptu' : e.message);
+
+async function download(f) {
+  if (f.busy) return;
+  const job = {done: 0, total: f.size || 1};
+  f.busy = true; f.btn.disabled = true;
+  f.el.classList.remove('done', 'fail'); f.btn.innerHTML = ICON_GET;
+  jobs.add(job); launch(f); say(f.name + ' indiriliyor');
+  try {
+    const blob = await grab(f, n => { job.done += n; f.el.style.setProperty('--p', Math.min(1, job.done / job.total)); });
+    saveBlob(blob, f.name);
+    f.el.classList.add('done'); f.btn.innerHTML = ICON_DONE;
+    say(f.name + ' indirildi · ' + fmtSize(blob.size)); shock();
+  } catch (e) {
+    f.el.classList.add('fail'); f.btn.innerHTML = ICON_FAIL;
+    say(errText(e));
+  }
+  jobs.delete(job); f.busy = false; f.btn.disabled = false;
+  setTimeout(() => f.el.style.setProperty('--p', 0), 900);
+}
+async function downloadZip() {
+  const picks = files.filter(f => f.sel);
+  if (!picks.length) return;
+  const btn = $('zip'), job = {done: 0, total: picks.reduce((s, f) => s + f.size, 0) || 1};
+  btn.disabled = true; jobs.add(job);
+  picks.forEach((f, i) => setTimeout(() => launch(f), i * 90 % 900));
+  try {
+    const entries = [];
+    for (const [i, f] of picks.entries()) {
+      say((i + 1) + '/' + picks.length + ' · ' + f.name);
+      const blob = await grab(f, n => { job.done += n; });
+      entries.push({name: f.path, data: new Uint8Array(await blob.arrayBuffer())});
+    }
+    saveBlob(makeZip(entries), slug.split('/')[1] + '-secilenler.zip');
+    say(picks.length + ' dosya ZIP olarak indirildi'); shock();
+    clearSelection();
+  } catch (e) { say(errText(e)); }
+  jobs.delete(job); btn.disabled = false;
+}
+function syncTray() {
+  const sel = files.filter(f => f.sel), bytes = sel.reduce((s, f) => s + f.size, 0);
+  $('all').hidden = !!sel.length || !files.length;
+  $('zip').hidden = $('clear').hidden = !sel.length;
+  $('zip').innerHTML = ICON_GET;
+  $('zip').append(sel.length + ' dosyayı ZIP yap · ' + fmtSize(bytes));
+}
+function clearSelection() {
+  for (const f of files) if (f.sel) { f.sel = false; f.box.checked = false; }
+  syncTray();
+}
+$('zip').onclick = downloadZip;
+$('clear').onclick = clearSelection;
+
+/* ---------- başlık ---------- */
+function setTitle(text) {
+  const h = $('title');
+  h.setAttribute('aria-label', text);
+  h.replaceChildren(...[...text].map((ch, i) => {
+    const s = document.createElement('span');
+    s.textContent = ch; s.style.setProperty('--i', i); s.setAttribute('aria-hidden', 'true');
+    return s;
+  }));
+  fitTitle();
+}
+function fitTitle() {
+  const h = $('title'), box = h.parentElement;
+  const cs = getComputedStyle(box), max = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  h.style.fontSize = '';
+  const w = h.offsetWidth;
+  if (w > max && max > 0) h.style.fontSize = parseFloat(getComputedStyle(h).fontSize) * max / w + 'px';
+}
+function setStats(items) {
+  $('stats').replaceChildren(...items.map(([k, v]) => {
+    const d = document.createElement('div'), t = document.createElement('dt'), n = document.createElement('dd');
+    t.textContent = k; n.textContent = v; d.append(t, n);
+    return d;
+  }));
+}
+function showForm() {
+  const f = document.createElement('form'), l = document.createElement('label'), i = document.createElement('div'), b = document.createElement('button');
+  const inp = document.createElement('input'), li = document.createElement('li');
+  f.className = 'open';
+  l.textContent = 'GitHub reposu'; l.htmlFor = 'repoInput';
+  i.className = 'search';
+  inp.id = 'repoInput'; inp.required = true; inp.pattern = '[\\w.\\-]+/[\\w.\\-]+'; inp.placeholder = 'kullanici/repo'; inp.spellcheck = false;
+  i.append(inp);
+  b.className = 'cta'; b.textContent = 'Aç';
+  f.append(l, i, b);
+  f.onsubmit = e => { e.preventDefault(); location.search = '?repo=' + encodeURIComponent(inp.value.trim()); };
+  li.append(f);
+  $('list').replaceChildren(li);
+  document.querySelector('.tray').hidden = true;
+}
+
+/* ---------- açılış ---------- */
+async function start() {
+  const glOk = initGL();
+  if (!glOk) document.documentElement.classList.add('no-gl');
+  resize();
+  addEventListener('resize', resize);
+  if (document.fonts) document.fonts.ready.then(fitTitle);
+  if (glOk) requestAnimationFrame(frame);
+
+  slug = resolveRepo();
+  if (!slug) { setTitle('Yörünge'); showForm(); return; }
+
+  const [owner, repo] = slug.split('/');
+  const shownTitle = CONFIG.title || repo.replace(/\.github\.io$/i, '');
+  document.title = shownTitle + ' · Dosyalar';
+  setTitle(shownTitle);
+  $('owner').textContent = owner;
+  say('Dosyalar okunuyor');
+
+  let data;
+  try { data = await loadRepo(slug); }
+  catch (e) {
+    say('');
+    $('list').replaceChildren(note(e.message, e.detail || ''));
+    return;
+  }
+  branch = data.branch;
+  const coll = new Intl.Collator('tr', {numeric: true});
+  files = data.items
+    .filter(t => !CONFIG.hide.some(rx => rx.test(t.path)))
+    .map(t => ({...t, ...classify(t.path), seed: Math.random(), sel: false}))
+    .sort((a, b) => (a.dir === b.dir ? coll.compare(a.name, b.name) : !a.dir ? -1 : !b.dir ? 1 : coll.compare(a.dir, b.dir)));
+  files.forEach(makeRow);
+
+  const total = files.reduce((s, f) => s + f.size, 0);
+  const stats = [['dosya', files.length.toLocaleString('tr')], ['boyut', fmtSize(total)]];
+  if (data.pushed) stats.push(['güncellendi', new Date(data.pushed).toLocaleDateString('tr', {day: 'numeric', month: 'long', year: 'numeric'})]);
+  setStats(stats);
+
+  $('tools').hidden = !files.length;
+  renderChips();
+  if (!files.length) {
+    $('list').replaceChildren(note('Henüz dosya yok', 'Repoya dosya yükleyince burada görünecek.'));
+    say(''); return;
+  }
+  renderList();
+  layoutStars();
+  uploadStars();
+  const all = $('all');
+  all.href = 'https://github.com/' + slug + '/archive/refs/heads/' + encodeURIComponent(branch) + '.zip';
+  all.hidden = false;
+  say(data.stale ? 'Kayıtlı liste gösteriliyor: ' + data.stale
+    : data.truncated ? 'Repo çok büyük, GitHub listenin bir kısmını gönderdi' : '');
+
+  const q = $('q');
+  let timer;
+  q.oninput = () => { clearTimeout(timer); timer = setTimeout(() => { query = lower(q.value.trim()); applyFilter(); }, 120); };
+  addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement !== q) { e.preventDefault(); q.focus(); }
+    if (e.key === 'Escape') closePop();
+  });
+}
+start();
+</script>
+</body>
+</html>
