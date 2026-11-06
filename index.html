@@ -245,10 +245,12 @@ async function loadRepo(slug) {
   try {
     const meta = await gh('/repos/' + slug);
     const branch = CONFIG.branch || meta.default_branch;
-    const commit = await gh('/repos/' + slug + '/commits/' + encodeURIComponent(branch));
-    const tree = await gh('/repos/' + slug + '/git/trees/' + commit.commit.tree.sha + '?recursive=1');
+    // /commits/{dal} büyük dosyalı commit'te zaman aşımına düşüyor, ref yalnızca adresi verir.
+    const head = await gh('/repos/' + slug + '/git/ref/heads/' + branch.split('/').map(encodeURIComponent).join('/'));
+    const commit = head.object.sha;
+    const tree = await gh('/repos/' + slug + '/git/trees/' + commit + '?recursive=1');
     const data = {
-      branch, commit: commit.sha, pushed: meta.pushed_at, truncated: !!tree.truncated,
+      branch, commit, pushed: meta.pushed_at, truncated: !!tree.truncated,
       items: (tree.tree || []).filter(t => t.type === 'blob').map(t => ({path: t.path, size: t.size || 0})),
     };
     try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
