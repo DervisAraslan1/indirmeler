@@ -245,9 +245,10 @@ async function loadRepo(slug) {
   try {
     const meta = await gh('/repos/' + slug);
     const branch = CONFIG.branch || meta.default_branch;
-    const tree = await gh('/repos/' + slug + '/git/trees/' + encodeURIComponent(branch) + '?recursive=1');
+    const commit = await gh('/repos/' + slug + '/commits/' + encodeURIComponent(branch));
+    const tree = await gh('/repos/' + slug + '/git/trees/' + commit.commit.tree.sha + '?recursive=1');
     const data = {
-      branch, pushed: meta.pushed_at, truncated: !!tree.truncated,
+      branch, commit: commit.sha, pushed: meta.pushed_at, truncated: !!tree.truncated,
       items: (tree.tree || []).filter(t => t.type === 'blob').map(t => ({path: t.path, size: t.size || 0})),
     };
     try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
@@ -259,8 +260,9 @@ async function loadRepo(slug) {
     throw e;
   }
 }
-const rawUrl = (slug, branch, path) =>
-  'https://raw.githubusercontent.com/' + slug + '/' + encodeURIComponent(branch) + '/' + path.split('/').map(encodeURIComponent).join('/');
+// Commit adresi değişmez: dal adresi önbellekten dosyanın eski sürümünü verebiliyor.
+const rawUrl = (slug, ref, path) =>
+  'https://raw.githubusercontent.com/' + slug + '/' + encodeURIComponent(ref) + '/' + path.split('/').map(encodeURIComponent).join('/');
 
 /* ---------- ZIP (sıkıştırmasız) ---------- */
 const CRC_T = (() => {
@@ -640,7 +642,7 @@ $('popGet').onclick = () => { const f = popFile; closePop(); download(f); };
 /* ==========================================================================
    LİSTE VE İNDİRME
    ========================================================================== */
-let slug = '', branch = '', files = [], labeled = [], cat = null, query = '';
+let slug = '', branch = '', ref = '', files = [], labeled = [], cat = null, query = '';
 const jobs = new Set();
 const ROW_CAP = 1500;
 
@@ -758,14 +760,16 @@ function saveBlob(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 async function grab(f, onBytes) {
-  const r = await fetch(rawUrl(slug, branch, f.path));
+  const r = await fetch(rawUrl(slug, ref, f.path));
   if (!r.ok) throw new Error(r.status === 404 ? f.name + ' bulunamadı' : 'GitHub hata verdi (' + r.status + ')');
   const reader = r.body.getReader(), parts = [];
+  let got = 0;
   for (;;) {
     const {done, value} = await reader.read();
     if (done) break;
-    parts.push(value); onBytes(value.length);
+    parts.push(value); got += value.length; onBytes(value.length);
   }
+  if (got !== f.size) throw new Error(f.name + ' eksik indi, tekrar dene');
   return new Blob(parts, {type: 'application/octet-stream'});
 }
 const launch = f => { if (f.pos && !REDUCED) comets.push({t0: performance.now(), pos: f.pos, color: CATS[f.cat].color}); };
@@ -892,6 +896,7 @@ async function start() {
     return;
   }
   branch = data.branch;
+  ref = data.commit || data.branch;
   const coll = new Intl.Collator('tr', {numeric: true});
   files = data.items
     .filter(t => !CONFIG.hide.some(rx => rx.test(t.path)))
